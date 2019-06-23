@@ -4,7 +4,7 @@ import Observers from './observers.js';
 // private map to store current state, value and settled status of each Promyse
 // because those value are stored inside internal slots, so them are
 // inacessible from outside
-const instancesStatesMap = new Map();
+const instancesStatesMap = new WeakMap();
 
 // private map to store observers of each Promise
 const instancesObserves = new Map();
@@ -225,7 +225,8 @@ export class Promyse {
         return value instanceof Promyse
             // do nothing if the values already is a Promyse
             ? value
-            // esle wrap the value into a resolved Promyse
+            // else wrap the value into a resolved Promyse
+            // the resolve function will take care of thenables
             : new Promyse(resolve => {
                 resolve(value);
             });
@@ -435,6 +436,11 @@ export class Promyse {
 function resolve(value) {
     // this pointer will be a Promyse instance
 
+    // If this and value refer to the same object, reject promise with a TypeError as the reason.
+    if (this === value) {
+        throw TypeError('Cannot solve a Promyse with itself');
+    }
+
     // get info about the Promyse instance
     const instanceStateValueSettledTuple = instancesStatesMap.get(this);
 
@@ -451,7 +457,56 @@ function resolve(value) {
                 reason => {
                     instancesStatesMap.set(this, new State(STATES.REJECTED, reason, true))
                 });
+        } else if (isThenable(value)) {
+
+            // if retrieving the property value.then results in a thrown exception e,
+            // reject the promyse with e as the reason
+            let then = null;
+            try {
+                then = value.then;
+            } catch (e) {
+                instancesStatesMap.set(this, new State(STATES.REJECTED, e, true));
+                return;
+            }
+
+            // if then is a method
+            // call method then of the thenable like it is a Promyse's then
+            if (typeof then === "function") {
+                try {
+                    then.call(
+                        value,
+                        // If both resolvePromise and rejectPromise are called,
+                        // or multiple calls to the same argument are made,
+                        // the first call takes precedence, and any further calls are ignored.
+                        // In fact, we don't know how the thenable will behave
+                        value => {
+                            if (!instancesStatesMap.get(this).settled) {
+                                instancesStatesMap.set(this, new State(STATES.FULFILLED, value, true));
+                            }
+                        },
+                        reason => {
+                            if (!instancesStatesMap.get(this).settled) {
+                                instancesStatesMap.set(this, new State(STATES.REJECTED, reason, true));
+                            }
+                        }
+                    );
+                } catch (e) {
+                    // If calling then throws an exception e,
+                    // if one of two callbacks passed to then was called, ignore it.
+                    // Otherwise, reject promyse with e as the reason.
+                    if (!instancesStatesMap.get(this).settled) {
+                        instancesStatesMap.set(this, new State(STATES.REJECTED, e, true));
+                    }
+                }
+
+            } else {
+                // is a Promyse resolved with a non-Promyse, thenable (where then is not a function) value
+                instancesStatesMap.set(this, new State(STATES.FULFILLED, value, true));
+            }
+
+
         } else {
+            // is a Promyse resolved with a non-thenable non-Promyse value
             instancesStatesMap.set(this, new State(STATES.FULFILLED, value, true));
         }
     }
@@ -482,7 +537,7 @@ function reject(reason) {
 
     // reject the Promyse only if it was not already settled
     if (!instanceStateValueSettledTuple.settled) {
-        // whichever reason is accepted, also a Promyse one
+        // whichever reason is accepted, also a Promyse or a thenable one
         instancesStatesMap.set(this, new State(STATES.REJECTED, reason, true));
     }
 
@@ -501,4 +556,9 @@ function reject(reason) {
     // no more need of the collection, because then method will acts differently
     // if the promyse is already settled
     instancesObserves.delete(this);
+}
+
+// check if an obj is a "thenable" using duck typing
+function isThenable(obj) {
+    obj === Object(obj) && obj.then;
 }

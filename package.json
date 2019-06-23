@@ -1,0 +1,32 @@
+{
+  "name": "promyse",
+  "version": "1.0.0",
+  "description": "Example implementation of Promises written in ES6 - not a polyfill",
+  "main": "Promyse/index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "dependencies": {
+    "promises-aplus-tests": "^2.1.2"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "promises-aplus-tests test/test_adapter"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jfet97/Promyse.git"
+  },
+  "keywords": [
+    "promise",
+    "es6",
+    "implementation",
+    "custom"
+  ],
+  "author": "Andrea Simone Costa",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jfet97/Promyse/issues"
+  },
+  "homepage": "https://github.com/jfet97/Promyse#readme"
+}
