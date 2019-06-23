@@ -6,7 +6,7 @@ import Observers from './observers.js';
 // inacessible from outside
 const instancesStatesMap = new Map();
 
-// map to store observers of each Promise
+// private map to store observers of each Promise
 const instancesObserves = new Map();
 
 export class Promyse {
