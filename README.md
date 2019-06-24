@@ -1,5 +1,6 @@
 [<img src="https://promisesaplus.com/assets/logo-small.png" alt="Promises/A+ logo" title="Promises/A+ 1.1 compliant" align="right" />](https://promisesaplus.com)
 
+
 # Promyse
 
 Promyse it's just a bad imitation of the Promise API that is Promises/A+ compliant.\
