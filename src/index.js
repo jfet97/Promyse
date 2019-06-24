@@ -9,6 +9,11 @@ const instancesStatesMap = new WeakMap();
 // private map to store observers of each Promise
 const instancesObservers = new Map();
 
+// check if an obj is a "thenable" using duck typing
+function isThenable(obj) {
+    return obj === Object(obj) && "then" in obj;
+}
+
 export class Promyse {
     constructor(executor) {
         // the executor is mandatory and must be a function
@@ -585,9 +590,4 @@ function reject(reason) {
         // if the promyse is already settled
         instancesObservers.delete(this);
     }
-}
-
-// check if an obj is a "thenable" using duck typing
-function isThenable(obj) {
-    return obj === Object(obj) && "then" in obj;
 }
