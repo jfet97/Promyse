@@ -7,7 +7,7 @@ import Observers from './observers.js';
 const instancesStatesMap = new WeakMap();
 
 // private map to store observers of each Promise
-const instancesObserves = new Map();
+const instancesObservers = new Map();
 
 export class Promyse {
     constructor(executor) {
@@ -24,7 +24,7 @@ export class Promyse {
 
         // each instance will have own observers collection
         // a set of onfulfill-onreject functions pair
-        instancesObserves.set(this, new Observers());
+        instancesObservers.set(this, new Observers());
 
         // synchronously call the executor,
         // passing to it the resolve and the reject functions
@@ -57,27 +57,42 @@ export class Promyse {
         // if the Promyse on which then was called was already settled
         if (instanceStateValueSettledTuple.settled) {
 
-            // we could simply return a Promyse immediately resolved/rejected
+            // we could simply return a Promyse "immediately" resolved/rejected
+            // "immediately" is in quotes because specs says that we have to defer it
             promyseToBeReturned = new Promyse((resolve, reject) => {
                 if (instanceStateValueSettledTuple.state === STATES.FULFILLED) {
-                    try {
+                    // the promyse was FULFILLED
+                    setTimeout((v) => {
                         // The returned Promyse has to be resolved
                         // with the resulting value of the call to the
                         // onfulfill function passed to then
-                        resolve(onfulfill(instanceStateValueSettledTuple.value));
-                    } catch (e) {
-                        // the 'onfulfill' observer passed to then
-                        // could throw an error
-                        // in such case, the returned Promyse should be rejected
-                        reject(e);
-                    }
+                        try {
+                            resolve(onfulfill(v));
+                        } catch (e) {
+                            // the 'onfulfill' observer passed to then
+                            // could throw an error
+                            // in such case, the returned Promyse should be rejected
+                            reject(e);
+                        }
+
+                    }, 0, instanceStateValueSettledTuple.value);
+
                 } else {
-                    try {
-                        // similar thing for the other case
-                        reject(onreject(instanceStateValueSettledTuple.value));
-                    } catch (e) {
-                        reject(e);
-                    }
+                    // similar thing for the other case
+                    // the promyse was REJECTED
+
+                    setTimeout((v) => {
+                        try {
+                            // The returned Promyse has to be resolved
+                            // with the resulting value of the call to the
+                            // onreject function passed to then
+                            resolve(onreject(v));
+                        } catch (e) {
+                            reject(e);
+                        }
+
+                    }, 0, instanceStateValueSettledTuple.value);
+
                 }
             });
 
@@ -89,7 +104,7 @@ export class Promyse {
                 // is settled
 
                 // this points to the Promyse on which then was called
-                const observers = instancesObserves.get(this);
+                const observers = instancesObservers.get(this);
 
                 observers.add({
                     // if the the Promyse on which then was called
@@ -112,7 +127,7 @@ export class Promyse {
                     // similar thing for the other case
                     onreject: value => {
                         try {
-                            reject(onfulfill(value))
+                            resolve(onreject(value))
                         } catch (e) {
                             reject(e);
                         }
@@ -441,11 +456,8 @@ function resolve(value) {
         throw TypeError('Cannot solve a Promyse with itself');
     }
 
-    // get info about the Promyse instance
-    const instanceStateValueSettledTuple = instancesStatesMap.get(this);
-
     // resolve the Promyse only if it was not already resolved
-    if (!instanceStateValueSettledTuple.settled) {
+    if (!instancesStatesMap.get(this).settled) {
 
         // Promyse resolved with a Promyse shouldn't happen
         if (value instanceof Promyse) {
@@ -453,13 +465,17 @@ function resolve(value) {
             // thanks to 'then' method
             value.then(
                 value => {
-                    instancesStatesMap.set(this, new State(STATES.FULFILLED, value, true))
+                    // uuuh recursion
+                    resolve.call(this, value);
                 },
                 reason => {
-                    // instancesStatesMap.set(this, new State(STATES.REJECTED, reason, true))
                     reject.call(this, reason);
                 });
+
+            // we have unwrapped the Promyse, nothing else to do here
+            return;
         } else if (isThenable(value)) {
+            // unwrap the thenable too
 
             // if retrieving the property value.then results in a thrown exception e,
             // reject the promyse with e as the reason
@@ -467,14 +483,19 @@ function resolve(value) {
             try {
                 then = value.then;
             } catch (e) {
-                // instancesStatesMap.set(this, new State(STATES.REJECTED, e, true));
                 reject.call(this, e);
+                // we have handled the error inside then metod,
+                // which took care of notify observers
+                // nothing else to do here
                 return;
             }
 
             // if then is a method
             // call method then of the thenable like it is a Promyse's then
             if (typeof then === "function") {
+
+                let alreadyCalled = false;
+
                 try {
                     then.call(
                         value,
@@ -483,26 +504,29 @@ function resolve(value) {
                         // the first call takes precedence, and any further calls are ignored.
                         // In fact, we don't know how the thenable will behave
                         value => {
-                            if (!instancesStatesMap.get(this).settled) {
-                                instancesStatesMap.set(this, new State(STATES.FULFILLED, value, true));
-                            }
+                            if (!alreadyCalled) {
+                                resolve.call(this, value)
+                                alreadyCalled = true;
+                            };
                         },
                         reason => {
-                            if (!instancesStatesMap.get(this).settled) {
-                                // instancesStatesMap.set(this, new State(STATES.REJECTED, reason, true));
-                                reject.call(this, reason);
-                            }
+                            if (!alreadyCalled) {
+                                reject.call(this, reason)
+                                alreadyCalled = true;
+                            };
                         }
                     );
                 } catch (e) {
                     // If calling then throws an exception e,
                     // if one of two callbacks passed to then was called, ignore it.
                     // Otherwise, reject promyse with e as the reason.
-                    if (!instancesStatesMap.get(this).settled) {
-                        // instancesStatesMap.set(this, new State(STATES.REJECTED, e, true));
+                    if (!alreadyCalled) {
                         reject.call(this, e);
                     }
                 }
+
+                // we have unwrapped the thenable, nothing else to do here
+                return;
 
             } else {
                 // is a Promyse resolved with a non-Promyse, thenable (where then is not a function) value
@@ -519,18 +543,18 @@ function resolve(value) {
         // from the observers collection (even because no Promyse could be resolved more than once)
 
         // get observers collection
-        const observers = instancesObserves.get(this);
+        const observers = instancesObservers.get(this);
         // call all 'onfulfill' observers, removing each one from the collection
         while (observers.hasNext) {
             const { onfulfill } = observers.get();
             // promyses resolution must be deferred
-            // setTimeout(onfulfill, 0, instanceStateValueSettledTuple.value);
-            Promise.resolve().then(() => onfulfill(instanceStateValueSettledTuple.value));
+            setTimeout(onfulfill, 0, instancesStatesMap.get(this).value);
+            //Promise.resolve().then(() => onfulfill(instancesStatesMap.get(this).value));
         };
 
         // no more need of the collection, because then method will acts differently
         // if the promyse is already settled
-        instancesObserves.delete(this);
+        instancesObservers.delete(this);
     }
 
 }
@@ -539,11 +563,8 @@ function resolve(value) {
 function reject(reason) {
     // this pointer will be a Promyse instance
 
-    const instanceStateValueSettledTuple = instancesStatesMap.get(this);
-    // get info about the Promyse instance
-
     // reject the Promyse only if it was not already settled
-    if (!instanceStateValueSettledTuple.settled) {
+    if (!instancesStatesMap.get(this).settled) {
         // whichever reason is accepted, also a Promyse or a thenable one
         instancesStatesMap.set(this, new State(STATES.REJECTED, reason, true));
 
@@ -551,22 +572,22 @@ function reject(reason) {
         // from the observers collection (even because no Promyse could be rejected more than once)
 
         // get observers collection
-        const observers = instancesObserves.get(this);
+        const observers = instancesObservers.get(this);
         // call all 'onreject' observers, removing each one from the collection
         while (observers.hasNext) {
             const { onreject } = observers.get();
             // promyses resolution must be deferred
-            // setTimeout(onreject, 0, instanceStateValueSettledTuple.value);
-            Promise.resolve().then(() => onreject(instanceStateValueSettledTuple.value));
+            setTimeout(onreject, 0, instancesStatesMap.get(this).value);
+            // Promise.resolve().then(() => onreject(instancesStatesMap.get(this).value));
         };
 
         // no more need of the collection, because then method will acts differently
         // if the promyse is already settled
-        instancesObserves.delete(this);
+        instancesObservers.delete(this);
     }
 }
 
 // check if an obj is a "thenable" using duck typing
 function isThenable(obj) {
-    obj === Object(obj) && obj.then;
+    return obj === Object(obj) && "then" in obj;
 }

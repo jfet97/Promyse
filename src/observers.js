@@ -4,11 +4,11 @@ export default class Observers {
     }
 
     add({onfulfill, onreject}) {
-        this.observer.push({onfulfill, onreject});
+        this.observers.push({onfulfill, onreject});
     }
 
     get() {
-        this.observer.shift();
+        return this.observers.shift();
     }
 
     get hasNext() {
