@@ -1,6 +1,6 @@
 {
   "name": "promyse",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "Example implementation of Promises written in ES6 - not a polyfill",
   "main": "dist/index.js",
   "files": [
@@ -24,7 +24,8 @@
     "promise",
     "es6",
     "implementation",
-    "custom"
+    "custom",
+    "promises-aplus"
   ],
   "author": "Andrea Simone Costa",
   "license": "MIT",
