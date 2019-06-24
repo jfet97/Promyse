@@ -356,7 +356,7 @@ export class Promyse {
                             // otherwise the real length of arrayOfRejections will be minor than
                             // iterableOfPromysesLength one
                             if (arrayOfRejections.map(el => el).length === iterableOfPromysesLength) {
-                                rejected(arrayOfRejections);
+                                reject(arrayOfRejections);
                             }
                         },
                     );
