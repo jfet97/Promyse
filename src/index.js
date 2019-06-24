@@ -446,6 +446,7 @@ function resolve(value) {
 
     // resolve the Promyse only if it was not already resolved
     if (!instanceStateValueSettledTuple.settled) {
+
         // Promyse resolved with a Promyse shouldn't happen
         if (value instanceof Promyse) {
             // if the value is itself a Promyse, we have to unwrap it
@@ -455,7 +456,8 @@ function resolve(value) {
                     instancesStatesMap.set(this, new State(STATES.FULFILLED, value, true))
                 },
                 reason => {
-                    instancesStatesMap.set(this, new State(STATES.REJECTED, reason, true))
+                    // instancesStatesMap.set(this, new State(STATES.REJECTED, reason, true))
+                    reject.call(this, reason);
                 });
         } else if (isThenable(value)) {
 
@@ -465,7 +467,8 @@ function resolve(value) {
             try {
                 then = value.then;
             } catch (e) {
-                instancesStatesMap.set(this, new State(STATES.REJECTED, e, true));
+                // instancesStatesMap.set(this, new State(STATES.REJECTED, e, true));
+                reject.call(this, e);
                 return;
             }
 
@@ -486,7 +489,8 @@ function resolve(value) {
                         },
                         reason => {
                             if (!instancesStatesMap.get(this).settled) {
-                                instancesStatesMap.set(this, new State(STATES.REJECTED, reason, true));
+                                // instancesStatesMap.set(this, new State(STATES.REJECTED, reason, true));
+                                reject.call(this, reason);
                             }
                         }
                     );
@@ -495,7 +499,8 @@ function resolve(value) {
                     // if one of two callbacks passed to then was called, ignore it.
                     // Otherwise, reject promyse with e as the reason.
                     if (!instancesStatesMap.get(this).settled) {
-                        instancesStatesMap.set(this, new State(STATES.REJECTED, e, true));
+                        // instancesStatesMap.set(this, new State(STATES.REJECTED, e, true));
+                        reject.call(this, e);
                     }
                 }
 
@@ -509,23 +514,25 @@ function resolve(value) {
             // is a Promyse resolved with a non-thenable non-Promyse value
             instancesStatesMap.set(this, new State(STATES.FULFILLED, value, true));
         }
+
+        // now all observer for the current Promyse should be notified and removed
+        // from the observers collection (even because no Promyse could be resolved more than once)
+
+        // get observers collection
+        const observers = instancesObserves.get(this);
+        // call all 'onfulfill' observers, removing each one from the collection
+        while (observers.hasNext) {
+            const { onfulfill } = observers.get();
+            // promyses resolution must be deferred
+            // setTimeout(onfulfill, 0, instanceStateValueSettledTuple.value);
+            Promise.resolve().then(() => onfulfill(instanceStateValueSettledTuple.value));
+        };
+
+        // no more need of the collection, because then method will acts differently
+        // if the promyse is already settled
+        instancesObserves.delete(this);
     }
 
-    // now all observer for the current Promyse should be notified and removed
-    // from the observers collection (even because no Promyse could be resolved more than once)
-
-    // get observers collection
-    const observers = instancesObserves.get(this);
-    // call all 'onfulfill' observers, removing each one from the collection
-    while (observers.hasNext) {
-        const { onfulfill } = observers.get();
-        // promyses resolution must be deferred
-        setTimeout(onfulfill, 0, instanceStateValueSettledTuple.value);
-    };
-
-    // no more need of the collection, because then method will acts differently
-    // if the promyse is already settled
-    instancesObserves.delete(this);
 }
 
 // reject function passed into the executor to reject a Promyse
@@ -539,23 +546,24 @@ function reject(reason) {
     if (!instanceStateValueSettledTuple.settled) {
         // whichever reason is accepted, also a Promyse or a thenable one
         instancesStatesMap.set(this, new State(STATES.REJECTED, reason, true));
+
+        // now all observer for the current Promyse should be notified and removed
+        // from the observers collection (even because no Promyse could be rejected more than once)
+
+        // get observers collection
+        const observers = instancesObserves.get(this);
+        // call all 'onreject' observers, removing each one from the collection
+        while (observers.hasNext) {
+            const { onreject } = observers.get();
+            // promyses resolution must be deferred
+            // setTimeout(onreject, 0, instanceStateValueSettledTuple.value);
+            Promise.resolve().then(() => onreject(instanceStateValueSettledTuple.value));
+        };
+
+        // no more need of the collection, because then method will acts differently
+        // if the promyse is already settled
+        instancesObserves.delete(this);
     }
-
-    // now all observer for the current Promyse should be notified and removed
-    // from the observers collection (even because no Promyse could be rejected more than once)
-
-    // get observers collection
-    const observers = instancesObserves.get(this);
-    // call all 'onreject' observers, removing each one from the collection
-    while (observers.hasNext) {
-        const { onreject } = observers.get();
-        // promyses resolution must be deferred
-        setTimeout(onreject, 0, instanceStateValueSettledTuple.value);
-    };
-
-    // no more need of the collection, because then method will acts differently
-    // if the promyse is already settled
-    instancesObserves.delete(this);
 }
 
 // check if an obj is a "thenable" using duck typing

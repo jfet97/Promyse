@@ -2,16 +2,18 @@
   "name": "promyse",
   "version": "2.0.0",
   "description": "Example implementation of Promises written in ES6 - not a polyfill",
-  "main": "Promyse/index.js",
-  "directories": {
-    "test": "tests"
+  "main": "dist/index.js",
+  "files": [
+    "/dist"
+  ],
+  "devDependencies": {
+    "promises-aplus-tests": "^2.1.2",
+    "webpack": "^4.35.0",
+    "webpack-cli": "^3.3.5"
   },
-  "dependencies": {
-    "promises-aplus-tests": "^2.1.2"
-  },
-  "devDependencies": {},
   "scripts": {
-    "test": "promises-aplus-tests test/test_adapter"
+    "build": "webpack --mode production",
+    "test": "npm run build && promises-aplus-tests tests/test_adapter"
   },
   "repository": {
     "type": "git",

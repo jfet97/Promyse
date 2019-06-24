@@ -1,7 +1,7 @@
 // Adapter for "promises-aplus-tests" test runner
 
-const path = require("path");
-const { Promyse } = require(path.join(__dirname, "../", "tests", "test_adapter.js"));
+var path = require("path");
+var { Promyse } = require(path.join(__dirname, "../", "dist", "index.js"));
 
 module.exports.deferred = function __deferred__() {
     var o = {};
