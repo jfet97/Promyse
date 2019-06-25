@@ -158,39 +158,17 @@ export class Promyse {
         // if onfinally is not a function
         // a proper default cb is substituted
         if (typeof onfinally !== 'function') {
-            onfulfill = x => x;
+            onfinally = x => x;
         }
 
         return this.then(
             // if the Promyse on which finally was called will resolve
             value => {
+
+                let onfinallyResult = null;
                 try {
                     // we try to call onfinally cb
-                    const onfinallyResult = onfinally();
-
-                    // if the resulting value of onfinally call is a Promyse
-                    if (onfinallyResult instanceof Promyse) {
-                        // in case the onfinallyResult is resolved
-                        // the promyse returned by finally should be fulfilled
-                        // with the completion value of the Promyse
-                        // on which the finally was called anyway
-                        // Promyse.resolve(2).finally(() => Promyse.resolve(45)); -> resolved 2
-
-                        // in case the onfinallyResult is rejected
-                        // the promyse returned by finally should be rejected
-                        // with the reason of rejecting onfinallyResult
-                        // Promyse.resolve(2).finally(() => Promyse.reject(45)); -> rejected 45
-                        return onfinally().then(
-                            () => value
-                        );
-                    } else {
-                        // if the resulting value of onfinally call is not a Promyse
-                        // the promyse returned by finally should be fulfilled
-                        // with the completion value of the Promyse
-                        // on which the finally was called
-                        // Promyse.resolve(2).finally(() => 98)); -> resolved 2
-                        return value;
-                    }
+                    onfinallyResult = onfinally();
 
                 } catch (e) {
                     // in case onfinally() has thrown an error
@@ -199,42 +177,222 @@ export class Promyse {
                     // Promyse.resolve(2).finally(() => { throw 98 }); -> rejected 98
                     throw e;
                 }
-            },
-            reason => {
-                try {
-                    // we try to call onfinally cb
-                    const onfinallyResult = onfinally();
 
-                    // if the resulting value of confinally call is a Promyse
-                    if (onfinallyResult instanceof Promyse) {
-                        // in case the onfinallyResult is resolved
-                        // the promyse returned by finally should be rejected
-                        // with the completion value of the Promyse
-                        // on which the finally was called anyway
-                        // Promyse.reject(2).finally(() => Promyse.resolve(45)); -> rejected 2
+                // if the resulting value of onfinally call is a Promyse
+                if (onfinallyResult instanceof Promyse) {
+                    // in case the onfinallyResult is resolved
+                    // the promyse returned by finally should be fulfilled
+                    // with the completion value of the Promyse
+                    // on which the finally was called anyway
+                    // Promyse.resolve(2).finally(() => Promyse.resolve(45)); -> resolved 2
 
-                        // in case the onfinallyResult is rejected
-                        // the promyse returned by finally should be rejected
-                        // with the reason of rejecting onfinallyResult
-                        // Promyse.reject(2).finally(() => Promyse.reject(45)); -> rejected 45
-                        return onfinally().then(
-                            () => { throw reason }
-                        );
+                    // in case the onfinallyResult is rejected
+                    // the promyse returned by finally should be rejected
+                    // with the reason of rejecting onfinallyResult
+                    // Promyse.resolve(2).finally(() => Promyse.reject(45)); -> rejected 45
+
+                    return onfinallyResult.then(
+                        () => value
+                    );
+
+                    // if the resulting value of onfinally call is a Thenable
+                } else if (isThenable(onfinallyResult)) {
+
+
+                    // if retrieving the property value.then results in a thrown exception e,
+                    // the promyse returned by finally should be rejected with e as the reason
+                    // Promyse.resolve(2).finally(() => ({ get then() { throw 34 } })); -> rejected 34
+                    let then = null;
+                    try {
+                        then = onfinallyResult.then;
+                    } catch (e) {
+                        throw e; // remember, we are inside an onresolve
+                    }
+
+                    // if then is a method
+                    // call method then of the thenable like it is a Promyse's then
+                    if (typeof then === "function") {
+
+                        let alreadyCalled = false;
+
+                        const resRej = {};
+                        const promyseToBeReturned = new Promyse((resolve, reject) => {
+                            resRej.resolve = resolve;
+                            resRej.reject = reject;
+                        });
+
+                        try {
+
+                            then.call(
+                                onfinallyResult,
+                                // If both resolvePromise and rejectPromise are called,
+                                // or multiple calls to the same argument are made,
+                                // the first call takes precedence, and any further calls are ignored.
+                                // In fact, we don't know how the thenable will behave
+
+                                () => {
+                                    // in case the thenable calls the resolve cb
+                                    // the promyse returned by finally should be fulfilled
+                                    // with the completion value of the Promyse
+                                    // on which the finally was called anyway
+                                    // Promyse.resolve(2).finally(() => ({then: resolve => resolve(42)})); -> resolved 2
+                                    if (!alreadyCalled) {
+                                        resRej.resolve(value);
+                                        alreadyCalled = true;
+                                    };
+                                },
+                                reason => {
+                                    // in case thenable call the reject cb
+                                    // the promyse returned by finally should be rejected
+                                    // with the reason of rejecting onfinallyResult
+                                    // Promyse.resolve(2).finally(() => ({then: (_, reject) => reject(42)})); -> rejected 42
+                                    if (!alreadyCalled) {
+                                        resRej.reject(reason);
+                                        alreadyCalled = true;
+                                    };
+                                }
+                            );
+                        } catch (e) {
+                            // If calling then throws an exception e,
+                            // if one of two callbacks passed to then was called, ignore it.
+                            // Otherwise, reject promyse with e as the reason.
+                            // Promyse.resolve(2).finally(() => ({ then() { throw 34 } })); -> rejected 34
+                            if (!alreadyCalled) {
+                                resRej.reject(e);
+                            }
+                        }
+
+                        // we have unwrapped the thenable, nothing else to do here
+                        return promyseToBeReturned;
 
                     } else {
-                        // if the resulting value of confinally call is not a Promyse
-                        // the promyse returned by finally should be rejected
-                        // with the completion value of the Promyse
-                        // on which the finally was called
-                        // Promyse.reject(2).finally(() => 98)); -> rejected 2
-                        throw reason;
+                        //  onfinally return a non-Promyse but thenable (where then is not a function) value
+                        // Promyse.resolve(2).finally(() => ({ then : 4 })); -> resolve 2
+                        return value;
                     }
+
+                } else {
+                    // if the resulting value of onfinally call is not a Promyse nor a thenable
+                    // the promyse returned by finally should be fulfilled
+                    // with the completion value of the Promyse
+                    // on which the finally was called
+                    // Promyse.resolve(2).finally(() => 98)); -> resolved 2
+                    return value;
+                }
+
+            },
+            reason => {
+
+                let onfinallyResult = null;
+                try {
+                    // we try to call onfinally cb
+                    onfinallyResult = onfinally();
+
                 } catch (e) {
                     // in case onfinally() has thrown an error
                     // the promyse returned by finally should be rejected with
                     // the reason of failing setted to the error just thrown
                     // Promyse.reject(2).finally(() => { throw 98 }); -> rejected 98
                     throw e;
+                }
+
+                // if the resulting value of confinally call is a Promyse
+                if (onfinallyResult instanceof Promyse) {
+                    // in case the onfinallyResult is resolved
+                    // the promyse returned by finally should be rejected
+                    // with the completion value of the Promyse
+                    // on which the finally was called anyway
+                    // Promyse.reject(2).finally(() => Promyse.resolve(45)); -> rejected 2
+
+                    // in case the onfinallyResult is rejected
+                    // the promyse returned by finally should be rejected
+                    // with the reason of rejecting onfinallyResult
+                    // Promyse.reject(2).finally(() => Promyse.reject(45)); -> rejected 45
+                    return onfinallyResult.then(
+                        () => { throw reason }
+                    );
+
+                } else if (isThenable(onfinallyResult)) {
+
+
+                    // if retrieving the property value.then results in a thrown exception e,
+                    // the promyse returned by finally should be rejected with e as the reason
+                    // Promyse.reject(2).finally(() => ({ get then() { throw 34 } })); -> rejected 34
+                    let then = null;
+                    try {
+                        then = onfinallyResult.then;
+                    } catch (e) {
+                        throw e; // remember, we are inside an onreject
+                    }
+
+                    // if then is a method
+                    // call method then of the thenable like it is a Promyse's then
+                    if (typeof then === "function") {
+
+                        let alreadyCalled = false;
+
+                        const resRej = {};
+                        const promyseToBeReturned = new Promyse((resolve, reject) => {
+                            resRej.reject = reject;
+                        });
+
+                        try {
+
+                            then.call(
+                                onfinallyResult,
+                                // If both resolvePromise and rejectPromise are called,
+                                // or multiple calls to the same argument are made,
+                                // the first call takes precedence, and any further calls are ignored.
+                                // In fact, we don't know how the thenable will behave
+
+                                () => {
+                                    // in case the thenable calls the resolve cb
+                                    // the promyse returned by finally should be rejected
+                                    // with the completion value of the Promyse
+                                    // on which the finally was called anyway
+                                    // Promyse.reject(2).finally(() => ({then: resolve => resolve(42)})); -> rejected 2
+                                    if (!alreadyCalled) {
+                                        resRej.reject(value);
+                                        alreadyCalled = true;
+                                    };
+                                },
+                                reason => {
+                                    // in case thenable call the reject cb
+                                    // the promyse returned by finally should be rejected
+                                    // with the reason of rejecting onfinallyResult
+                                    // Promyse.reject(2).finally(() => ({then: (_, reject) => reject(42)})); -> rejected 42
+                                    if (!alreadyCalled) {
+                                        resRej.reject(reason);
+                                        alreadyCalled = true;
+                                    };
+                                }
+                            );
+                        } catch (e) {
+                            // If calling then throws an exception e,
+                            // if one of two callbacks passed to then was called, ignore it.
+                            // Otherwise, reject promyse with e as the reason.
+                            // Promyse.reject(2).finally(() => ({ then() { throw 34 } })); -> rejected 34
+                            if (!alreadyCalled) {
+                                resRej.reject(e);
+                            }
+                        }
+
+                        // we have unwrapped the thenable, nothing else to do here
+                        return promyseToBeReturned;
+
+                    } else {
+                        //  onfinally return a non-Promyse but thenable (where then is not a function) value
+                        // Promyse.reject(2).finally(() => ({ then : 4 })); -> reject 2
+                        throw value;
+                    }
+
+                } else {
+                    // if the resulting value of confinally call is not a Promyse nor a thenabke
+                    // the promyse returned by finally should be rejected
+                    // with the completion value of the Promyse
+                    // on which the finally was called
+                    // Promyse.reject(2).finally(() => 98)); -> rejected 2
+                    throw reason;
                 }
             }
         );
@@ -534,7 +692,7 @@ function resolve(value) {
                 return;
 
             } else {
-                // is a Promyse resolved with a non-Promyse, thenable (where then is not a function) value
+                // is a Promyse resolved with a non-Promyse but thenable (where then is not a function) value
                 instancesStatesMap.set(this, new State(STATES.FULFILLED, value, true));
             }
 
