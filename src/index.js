@@ -383,7 +383,7 @@ export class Promyse {
                     } else {
                         //  onfinally return a non-Promyse but thenable (where then is not a function) value
                         // Promyse.reject(2).finally(() => ({ then : 4 })); -> reject 2
-                        throw value;
+                        throw reason;
                     }
 
                 } else {
