@@ -352,7 +352,7 @@ export class Promyse {
                                     // on which the finally was called anyway
                                     // Promyse.reject(2).finally(() => ({then: resolve => resolve(42)})); -> rejected 2
                                     if (!alreadyCalled) {
-                                        resRej.reject(value);
+                                        resRej.reject(reason);
                                         alreadyCalled = true;
                                     };
                                 },
