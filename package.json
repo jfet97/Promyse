@@ -1,6 +1,6 @@
 {
   "name": "promyse",
-  "version": "3.2.4",
+  "version": "3.2.6",
   "description": "Example implementation of Promises written in ES6 - not a polyfill",
   "main": "dist/index.js",
   "files": [
