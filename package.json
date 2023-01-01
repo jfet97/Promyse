@@ -8,8 +8,8 @@
   ],
   "devDependencies": {
     "promises-aplus-tests": "^2.1.2",
-    "webpack": "^4.35.0",
-    "webpack-cli": "^3.3.5"
+    "webpack": "^5.75.0",
+    "webpack-cli": "^5.0.1"
   },
   "scripts": {
     "build": "webpack --mode production",
